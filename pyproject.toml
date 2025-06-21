@@ -1,0 +1,28 @@
+[project]
+name = "pr-pirate"
+version = "0.1.0"
+description = "Automated GitHub issue discovery and fixing using AI"
+readme = "README.md"
+authors = [{name = "PR Pirate"}]
+requires-python = ">=3.11"
+dependencies = [
+    "pygithub>=2.6.1",
+    "pydantic>=2.11.7",
+    "sqlalchemy>=2.0.41",
+    "rich>=14.0.0",
+    "tenacity>=9.1.2",
+    "aiohttp>=3.12.13",
+]
+
+[project.scripts]
+pr-pirate = "pr_pirate.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pr_pirate"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

@@ -34,14 +34,34 @@ export GITHUB_TOKEN=your_github_token_here
 
 ### Testing the Discovery Phase
 
-Run the discovery phase to find repositories and issues:
-
+**Option 1: Auto-discover repositories by topic**
 ```bash
 uv run python main.py
 ```
 
+**Option 2: Check specific repositories**
+```bash
+# Using comma-separated list
+uv run python main.py --repos "huggingface/transformers,openai/openai-python,langchain-ai/langchain"
+
+# Using predefined lists
+uv run python main.py --repos llm        # Popular LLM repositories
+uv run python main.py --repos genai      # Generative AI tools
+uv run python main.py --repos llmops     # LLMOps and deployment tools
+```
+
+**Option 3: Customize discovery parameters**
+```bash
+uv run python main.py --categories "llm,genai,nlp" --min-stars 50 --max-stars 10000 --max-repos 30
+```
+
+**All available options:**
+```bash
+uv run python main.py --help
+```
+
 This will:
-- 🔍 Search GitHub for LLM/GenAI repositories
+- 🔍 Search GitHub for LLM/GenAI repositories OR use your specified list
 - 📊 Filter repositories based on activity, stars, and language
 - 🎯 Find suitable issues in top repositories
 - 📋 Display a summary of discovered issues

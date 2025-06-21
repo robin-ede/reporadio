@@ -271,3 +271,49 @@ class RepositoryDiscoverer:
         sorted_repos = sorted(self.discovered_repos, key=priority_score, reverse=True)
 
         return sorted_repos[:limit]
+
+    def get_repositories_by_names(self, repo_names: List[str]) -> List[Repository]:
+        """Get repository data directly from a list of repository names."""
+        repositories = []
+        
+        with Progress() as progress:
+            task = progress.add_task(
+                "[green]Fetching repositories...", 
+                total=len(repo_names)
+            )
+            
+            for repo_name in repo_names:
+                console.print(f"\n[blue]📋 Fetching {repo_name}...[/blue]")
+                
+                try:
+                    # Use GitHub client to get repository data
+                    repo_data_list = self.github.search_repositories(
+                        query=f"repo:{repo_name}",
+                        per_page=1
+                    )
+                    
+                    if repo_data_list:
+                        repo_data = repo_data_list[0]
+                        repo_data["discovered_at"] = datetime.now()
+                        
+                        try:
+                            repo = Repository(**repo_data)
+                            repositories.append(repo)
+                            console.print(f"  [green]✓[/green] Added {repo_name}")
+                        except Exception as e:
+                            console.print(f"  [yellow]⚠[/yellow] Could not parse {repo_name}: {e}")
+                    else:
+                        console.print(f"  [red]✗[/red] Repository {repo_name} not found or not accessible")
+                        
+                except Exception as e:
+                    console.print(f"  [red]✗[/red] Error fetching {repo_name}: {e}")
+                
+                progress.update(task, advance=1)
+        
+        # Filter repositories using the same criteria
+        filtered_repos = self._filter_repositories(repositories)
+        
+        self.discovered_repos = filtered_repos
+        console.print(f"\n[blue]ℹ[/blue] Successfully fetched {len(filtered_repos)} repositories")
+        
+        return filtered_repos

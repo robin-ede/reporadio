@@ -8,10 +8,12 @@ This script tests the GitHub repository and issue discovery functionality.
 import os
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 # Add src to path for development
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -19,11 +21,59 @@ from rich.text import Text
 from pr_pirate.discovery import GitHubClient, RepositoryDiscoverer, IssueDiscoverer
 from pr_pirate.utils import DatabaseManager
 
+# Add config to path for dynamic imports
+sys.path.insert(0, str(Path(__file__).parent / "config"))
+
 console = Console()
 
 
-def main():
-    """Main discovery testing function."""
+@click.command()
+@click.option(
+    "--repos",
+    "-r",
+    help="Comma-separated list of repositories to check (e.g., 'owner/repo1,owner/repo2') OR predefined list name (llm,genai,llmops,ml,nlp)",
+    type=str,
+)
+@click.option(
+    "--categories",
+    "-c",
+    help="Categories to discover (llm,genai,llmops,ml,nlp)",
+    default="llm,genai",
+    type=str,
+)
+@click.option(
+    "--min-stars",
+    help="Minimum stars for discovered repositories",
+    default=10,
+    type=int,
+)
+@click.option(
+    "--max-stars", 
+    help="Maximum stars for discovered repositories", 
+    default=5000, 
+    type=int
+)
+@click.option(
+    "--max-repos",
+    help="Maximum repositories to process",
+    default=20,
+    type=int,
+)
+@click.option(
+    "--max-issues-per-repo",
+    help="Maximum issues to fetch per repository", 
+    default=5,
+    type=int
+)
+def main(
+    repos: Optional[str],
+    categories: str,
+    min_stars: int,
+    max_stars: int,
+    max_repos: int,
+    max_issues_per_repo: int,
+):
+    """🏴‍☠️ PR Pirate - Automated GitHub issue discovery and fixing using AI."""
     console.print(
         Panel.fit(
             Text("🏴‍☠️ PR Pirate - Discovery Phase", style="bold blue"), style="bold"
@@ -57,23 +107,51 @@ def main():
         console.print("\n[blue]🔐 Testing GitHub authentication...[/blue]")
         user = github_client.get_authenticated_user()
 
-        # Discover repositories
-        console.print("\n[blue]🔍 Starting repository discovery...[/blue]")
-        repositories = repo_discoverer.discover_repositories(
-            categories=["llm", "genai"],  # Start with these categories
-            min_stars=10,
-            max_stars=5000,
-            max_repos_per_query=20,  # Limit for testing
-        )
+        # Choose discovery method
+        if repos:
+            # Check if it's a predefined list name
+            try:
+                from repo_lists import get_repo_list, list_available_repo_lists
+                
+                if repos.lower() in list_available_repo_lists():
+                    # Use predefined list
+                    repo_list = get_repo_list(repos.lower())
+                    console.print(f"\n[blue]📋 Using predefined '{repos}' repository list ({len(repo_list)} repositories)...[/blue]")
+                else:
+                    # Parse as comma-separated list
+                    repo_list = [repo.strip() for repo in repos.split(",")]
+                    console.print(f"\n[blue]📋 Processing {len(repo_list)} specified repositories...[/blue]")
+            except ImportError:
+                # Fallback if config not available
+                repo_list = [repo.strip() for repo in repos.split(",")]
+                console.print(f"\n[blue]📋 Processing {len(repo_list)} specified repositories...[/blue]")
+            
+            for repo in repo_list[:10]:  # Show first 10
+                console.print(f"  • {repo}")
+            if len(repo_list) > 10:
+                console.print(f"  ... and {len(repo_list) - 10} more")
+            
+            repositories = repo_discoverer.get_repositories_by_names(repo_list)
+        else:
+            # Discovery mode
+            category_list = [cat.strip() for cat in categories.split(",")]
+            console.print(f"\n[blue]🔍 Starting repository discovery for categories: {', '.join(category_list)}...[/blue]")
+            
+            repositories = repo_discoverer.discover_repositories(
+                categories=category_list,
+                min_stars=min_stars,
+                max_stars=max_stars,
+                max_repos_per_query=max_repos,
+            )
 
         if not repositories:
             console.print(
-                "[yellow]No repositories found. Try adjusting search criteria.[/yellow]"
+                "[yellow]No repositories found. Try adjusting search criteria or repository list.[/yellow]"
             )
             return 0
 
         # Get top repositories for issue discovery
-        top_repos = repo_discoverer.get_top_repositories(limit=5)
+        top_repos = repo_discoverer.get_top_repositories(limit=min(len(repositories), 10))
         console.print(
             f"\n[green]✓[/green] Selected top {len(top_repos)} repositories for issue discovery"
         )
@@ -82,7 +160,7 @@ def main():
         console.print("\n[blue]🎯 Starting issue discovery...[/blue]")
         issues = issue_discoverer.discover_issues(
             repositories=top_repos,
-            max_issues_per_repo=5,  # Limit for testing
+            max_issues_per_repo=max_issues_per_repo,
             include_unlabeled=False,
         )
 

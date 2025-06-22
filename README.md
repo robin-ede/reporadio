@@ -19,6 +19,12 @@ RepoRadio transforms GitHub issue discovery into an audio experience. It finds i
 4. **Audio Generation**: Creates TTS summaries using Replicate's Kokoro model
 5. **Broadcasting**: Sends audio files via Discord webhook with Google Drive backup
 
+## 📺 See It In Action
+
+[![RepoRadio Demo Video](https://img.youtube.com/vi/o58UoQb2gbc/0.jpg)](https://youtu.be/o58UoQb2gbc)
+
+*Watch RepoRadio discover repositories, assess issues with AI, and generate audio summaries*
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -31,7 +37,7 @@ RepoRadio transforms GitHub issue discovery into an audio experience. It finds i
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/reporadio.git
+git clone https://github.com/robin-ede/reporadio.git
 cd reporadio
 
 # Install dependencies
@@ -92,6 +98,8 @@ GOOGLE_DRIVE_FOLDER_ID=your_google_drive_folder_id_here
 - **OpenAI Key**: [OpenAI API Keys](https://platform.openai.com/api-keys)
 
 ## 📱 Discord Integration
+
+![Discord Notifications](assets/screenshots/discord-notification.png)
 
 Set up Discord webhooks for server deployment monitoring:
 

@@ -117,7 +117,7 @@ class DiscordNotifier:
             )
 
             results.append(
-                f"`{i:2d}.` **{issue.repo_full_name}** #{issue.number} • {issue_type}\n"
+                f"`{i:2d}.` [**{issue.repo_full_name}** #{issue.number}]({issue.html_url}) • {issue_type}\n"
                 f"    {title_short}\n"
                 f"    {difficulty} • Score: {assessment.composite_score:.1f}/10"
             )

@@ -1,5 +1,6 @@
 from typing import List, Dict
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress
@@ -49,8 +50,9 @@ class IssueDiscoverer:
         repositories: List[Repository],
         max_issues_per_repo: int = 10,
         include_unlabeled: bool = False,
+        max_workers: int = 3,
     ) -> List[Issue]:
-        """Discover issues from the given repositories."""
+        """Discover issues from the given repositories in parallel."""
         all_issues = []
 
         with Progress() as progress:
@@ -58,23 +60,31 @@ class IssueDiscoverer:
                 "[green]Discovering issues...", total=len(repositories)
             )
 
-            for repo in repositories:
-                console.print(f"\n[blue]🔍 Scanning {repo.full_name}...[/blue]")
+            # Use ThreadPoolExecutor for parallel repository processing
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all repository scanning tasks
+                future_to_repo = {
+                    executor.submit(
+                        self._get_repository_issues_with_logging,
+                        repo,
+                        max_issues_per_repo,
+                        include_unlabeled,
+                    ): repo
+                    for repo in repositories
+                }
 
-                try:
-                    issues = self._get_repository_issues(
-                        repo, max_issues_per_repo, include_unlabeled
-                    )
-                    all_issues.extend(issues)
+                # Process completed tasks as they finish
+                for future in as_completed(future_to_repo):
+                    repo = future_to_repo[future]
+                    try:
+                        issues = future.result()
+                        all_issues.extend(issues)
+                    except Exception as e:
+                        console.print(
+                            f"  [red]✗[/red] Error scanning {repo.full_name}: {e}"
+                        )
 
-                    console.print(
-                        f"  [green]✓[/green] Found {len(issues)} suitable issues"
-                    )
-
-                except Exception as e:
-                    console.print(f"  [red]✗[/red] Error: {e}")
-
-                progress.update(task, advance=1)
+                    progress.update(task, advance=1)
 
         # Filter and prioritize issues
         filtered_issues = self._filter_and_prioritize_issues(all_issues)
@@ -83,6 +93,24 @@ class IssueDiscoverer:
         self._print_discovery_summary()
 
         return filtered_issues
+
+    def _get_repository_issues_with_logging(
+        self, repository: Repository, max_issues: int, include_unlabeled: bool
+    ) -> List[Issue]:
+        """Get issues from a repository with console logging (thread-safe)."""
+        console.print(f"\n[blue]🔍 Scanning {repository.full_name}...[/blue]")
+
+        try:
+            issues = self._get_repository_issues(
+                repository, max_issues, include_unlabeled
+            )
+            console.print(
+                f"  [green]✓[/green] Found {len(issues)} suitable issues in {repository.full_name}"
+            )
+            return issues
+        except Exception as e:
+            console.print(f"  [red]✗[/red] Error in {repository.full_name}: {e}")
+            return []
 
     def _get_repository_issues(
         self, repository: Repository, max_issues: int, include_unlabeled: bool

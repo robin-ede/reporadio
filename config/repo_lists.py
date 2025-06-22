@@ -3,7 +3,7 @@
 # Popular LLM repositories
 LLM_REPOS = [
     "huggingface/transformers",
-    "openai/openai-python", 
+    "openai/openai-python",
     "microsoft/DeepSpeed",
     "THUDM/ChatGLM-6B",
     "facebookresearch/llama",
@@ -17,7 +17,7 @@ LLM_REPOS = [
 # Generative AI and tools
 GENAI_REPOS = [
     "langchain-ai/langchain",
-    "run-llama/llama_index", 
+    "run-llama/llama_index",
     "openai/gym",
     "Stability-AI/stablediffusion",
     "CompVis/stable-diffusion",
@@ -51,7 +51,7 @@ ML_REPOS = [
     "Lightning-AI/lightning",
     "jax-ml/jax",
     "dmlc/xgboost",
-    "catboost/catboost", 
+    "catboost/catboost",
     "microsoft/LightGBM",
     "apache/spark",
 ]
@@ -73,16 +73,18 @@ NLP_REPOS = [
 # All predefined lists
 REPO_LISTS = {
     "llm": LLM_REPOS,
-    "genai": GENAI_REPOS, 
+    "genai": GENAI_REPOS,
     "llmops": LLMOPS_REPOS,
     "ml": ML_REPOS,
     "nlp": NLP_REPOS,
 }
 
+
 def get_repo_list(name: str) -> list[str]:
     """Get a predefined repository list by name."""
     return REPO_LISTS.get(name.lower(), [])
 
+
 def list_available_repo_lists() -> list[str]:
     """Get names of all available predefined repository lists."""
-    return list(REPO_LISTS.keys()) 
+    return list(REPO_LISTS.keys())

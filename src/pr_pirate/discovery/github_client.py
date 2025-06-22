@@ -79,15 +79,17 @@ class GitHubClient:
                     "stargazers_count": repo.stargazers_count,
                     "forks_count": repo.forks_count,
                     "language": repo.language,
-                    "topics": repo.get_topics(),
-                    "license": getattr(getattr(repo, 'license', None), 'name', None),
+                    "topics": getattr(
+                        repo, "topics", []
+                    ),  # Use cached topics if available
+                    "license": getattr(getattr(repo, "license", None), "name", None),
                     "created_at": repo.created_at,
                     "updated_at": repo.updated_at,
                     "pushed_at": repo.pushed_at,
                     "open_issues_count": repo.open_issues_count,
                     "has_issues": repo.has_issues,
                     "archived": repo.archived,
-                    "disabled": getattr(repo, 'disabled', False),
+                    "disabled": getattr(repo, "disabled", False),
                 }
 
                 repositories.append(repo_data)
@@ -148,7 +150,7 @@ class GitHubClient:
                     "comments": issue.comments,
                     "created_at": issue.created_at,
                     "updated_at": issue.updated_at,
-                    "author_association": getattr(issue, 'author_association', 'NONE'),
+                    "author_association": getattr(issue, "author_association", "NONE"),
                     "repo_id": repo.id,
                     "repo_full_name": repo_full_name,
                 }

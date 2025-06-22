@@ -29,7 +29,7 @@ class Assessment(BaseModel):
 
     # Metadata
     assessed_at: datetime = Field(default_factory=datetime.now)
-    model_used: str = "claude-3-sonnet"
+    model_used: str = "claude-3-5-sonnet"
     assessment_version: str = "1.0"
 
     @property

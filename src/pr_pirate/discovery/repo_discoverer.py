@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress
@@ -60,33 +61,58 @@ class RepositoryDiscoverer:
         max_stars: int = 10000,
         max_repos_per_query: int = 50,
         exclude_archived: bool = True,
+        max_workers: int = 3,
     ) -> List[Repository]:
-        """Discover repositories matching our criteria."""
+        """Discover repositories matching our criteria with parallel search."""
         if categories is None:
             categories = list(self.TARGET_TOPICS.keys())
 
         all_repositories = []
 
+        # Get all topics from all categories for parallel processing
+        all_topics = []
+        for category in categories:
+            topics = self.TARGET_TOPICS.get(category, [category])
+            for topic in topics:
+                all_topics.append((category, topic))
+
+        console.print(
+            f"\n[blue]🔍 Searching {len(all_topics)} topics across {len(categories)} categories...[/blue]"
+        )
+
         with Progress() as progress:
             task = progress.add_task(
-                "[green]Discovering repositories...", total=len(categories)
+                "[green]Discovering repositories...", total=len(all_topics)
             )
 
-            for category in categories:
-                console.print(
-                    f"\n[blue]🔍 Searching {category.upper()} repositories...[/blue]"
-                )
+            # Use ThreadPoolExecutor for parallel topic searches
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all topic search tasks
+                future_to_topic = {
+                    executor.submit(
+                        self._search_single_topic,
+                        topic,
+                        min_stars,
+                        max_stars,
+                        max_repos_per_query,
+                        exclude_archived,
+                    ): (category, topic)
+                    for category, topic in all_topics
+                }
 
-                repos = self._search_category_repositories(
-                    category=category,
-                    min_stars=min_stars,
-                    max_stars=max_stars,
-                    max_repos=max_repos_per_query,
-                    exclude_archived=exclude_archived,
-                )
+                # Process completed searches as they finish
+                for future in as_completed(future_to_topic):
+                    category, topic = future_to_topic[future]
+                    try:
+                        repos = future.result()
+                        all_repositories.extend(repos)
+                        console.print(
+                            f"  [green]✓[/green] Found {len(repos)} repos for '{topic}' ({category})"
+                        )
+                    except Exception as e:
+                        console.print(f"  [red]✗[/red] Error searching '{topic}': {e}")
 
-                all_repositories.extend(repos)
-                progress.update(task, advance=1)
+                    progress.update(task, advance=1)
 
         # Remove duplicates and filter
         unique_repos = self._deduplicate_repositories(all_repositories)
@@ -96,6 +122,56 @@ class RepositoryDiscoverer:
         self._print_discovery_summary()
 
         return filtered_repos
+
+    def _search_single_topic(
+        self,
+        topic: str,
+        min_stars: int,
+        max_stars: int,
+        max_repos: int,
+        exclude_archived: bool,
+    ) -> List[Repository]:
+        """Search repositories for a single topic (optimized for parallel execution)."""
+        repositories = []
+
+        try:
+            # Build search query
+            query_parts = [
+                f"topic:{topic}",
+                f"stars:{min_stars}..{max_stars}",
+                "is:public",
+            ]
+
+            if exclude_archived:
+                query_parts.append("archived:false")
+
+            query = " ".join(query_parts)
+
+            # Search repositories
+            repo_data_list = self.github.search_repositories(
+                query=query,
+                sort="stars",
+                order="desc",
+                per_page=min(max_repos, 100),
+            )
+
+            # Convert to Repository objects (without fetching topics to save API calls)
+            for repo_data in repo_data_list:
+                try:
+                    repo_data["discovered_at"] = datetime.now()
+                    # Use topics from search result instead of making additional API calls
+                    if "topics" not in repo_data:
+                        repo_data["topics"] = []
+                    repo = Repository(**repo_data)
+                    repositories.append(repo)
+                except Exception:
+                    # Skip problematic repos silently during parallel execution
+                    continue
+
+        except Exception as e:
+            console.print(f"[red]✗[/red] Failed to search topic '{topic}': {e}")
+
+        return repositories
 
     def _search_category_repositories(
         self,
@@ -185,12 +261,8 @@ class RepositoryDiscoverer:
 
     def _is_repository_suitable(self, repo: Repository) -> bool:
         """Check if repository meets our suitability criteria."""
-        # Basic viability check
-        if not repo.is_viable:
-            return False
-
-        # Language filter
-        if repo.language not in self.SUPPORTED_LANGUAGES:
+        # Basic viability check (has issues, not archived/disabled)
+        if not repo.has_issues or repo.archived or repo.disabled:
             return False
 
         # Activity check (must be updated within last 6 months)
@@ -201,10 +273,6 @@ class RepositoryDiscoverer:
 
         # Issue activity check
         if repo.open_issues_count == 0:
-            return False
-
-        # Stars range (not too popular, not too obscure)
-        if repo.stars > 10000 or repo.stars < 10:
             return False
 
         return True
@@ -275,45 +343,49 @@ class RepositoryDiscoverer:
     def get_repositories_by_names(self, repo_names: List[str]) -> List[Repository]:
         """Get repository data directly from a list of repository names."""
         repositories = []
-        
+
         with Progress() as progress:
             task = progress.add_task(
-                "[green]Fetching repositories...", 
-                total=len(repo_names)
+                "[green]Fetching repositories...", total=len(repo_names)
             )
-            
+
             for repo_name in repo_names:
                 console.print(f"\n[blue]📋 Fetching {repo_name}...[/blue]")
-                
+
                 try:
                     # Use GitHub client to get repository data
                     repo_data_list = self.github.search_repositories(
-                        query=f"repo:{repo_name}",
-                        per_page=1
+                        query=f"repo:{repo_name}", per_page=1
                     )
-                    
+
                     if repo_data_list:
                         repo_data = repo_data_list[0]
                         repo_data["discovered_at"] = datetime.now()
-                        
+
                         try:
                             repo = Repository(**repo_data)
                             repositories.append(repo)
                             console.print(f"  [green]✓[/green] Added {repo_name}")
                         except Exception as e:
-                            console.print(f"  [yellow]⚠[/yellow] Could not parse {repo_name}: {e}")
+                            console.print(
+                                f"  [yellow]⚠[/yellow] Could not parse {repo_name}: {e}"
+                            )
                     else:
-                        console.print(f"  [red]✗[/red] Repository {repo_name} not found or not accessible")
-                        
+                        console.print(
+                            f"  [red]✗[/red] Repository {repo_name} not found or not accessible"
+                        )
+
                 except Exception as e:
                     console.print(f"  [red]✗[/red] Error fetching {repo_name}: {e}")
-                
+
                 progress.update(task, advance=1)
-        
+
         # Filter repositories using the same criteria
         filtered_repos = self._filter_repositories(repositories)
-        
+
         self.discovered_repos = filtered_repos
-        console.print(f"\n[blue]ℹ[/blue] Successfully fetched {len(filtered_repos)} repositories")
-        
+        console.print(
+            f"\n[blue]ℹ[/blue] Successfully fetched {len(filtered_repos)} repositories"
+        )
+
         return filtered_repos
